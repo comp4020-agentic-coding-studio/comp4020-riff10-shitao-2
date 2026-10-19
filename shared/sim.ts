@@ -180,7 +180,7 @@ const cleanText = (raw: unknown, max: number): string | null => {
 };
 export const cleanName = (raw: unknown): string => cleanText(raw, 16) ?? "Guest";
 
-/** Add a player, or return the existing one. Returns null when the room is full. */
+/** Add a player, or return the existing one. Returns null when the room is full, or locked to newcomers. */
 export function join(s: RoomState, id: string, token: string, name: string, ch: Changes): Player | null {
   const existing = s.players[id];
   if (existing) {
@@ -193,6 +193,7 @@ export function join(s: RoomState, id: string, token: string, name: string, ch: 
   }
   // capacity is seats at the table, not every browser that ever visited
   if (Object.values(s.players).filter((q) => q.connected).length >= MAX_PLAYERS) return null;
+  if (s.locked) return null;
   if (Object.keys(s.players).length >= MAX_IDENTITIES) {
     // forget the longest-gone identity; its buildings stay, credited to "someone"
     const gone = Object.values(s.players)
@@ -242,7 +243,7 @@ export function join(s: RoomState, id: string, token: string, name: string, ch: 
 /** A player's connection dropped. Their buildings, claims and stats stay; the host role moves on. */
 export function leave(s: RoomState, id: string, ch: Changes): void {
   const p = s.players[id];
-  if (!p) return;
+  if (!p || !p.connected) return;
   p.connected = false;
   p.dx = p.dy = 0;
   if (s.hostId === id) {
@@ -730,6 +731,34 @@ function mutate(s: RoomState, p: Player, c: Exclude<Command, { k: "move" }>, ch:
         ch.meta = true;
       }
       checkRestraint(s, ch);
+      return OK;
+    }
+    case "remove": {
+      // moderation: the host can send a player away and forget their session, so
+      // they come back (if the room is open) as a stranger with nothing of theirs to control
+      if (typeof c.who !== "string") return no("malformed removal");
+      if (!isHost(s, pid)) return no("only the host can remove a player");
+      const q = Object.hasOwn(s.players, c.who) ? s.players[c.who] : undefined;
+      if (!q) return no("nobody by that id is in this room");
+      if (q.id === pid) return no("you can't remove yourself: just leave");
+      leave(s, q.id, ch);
+      delete s.tokens[q.id];
+      s.receipts[q.id] = [];
+      log(s, ch, `${p.name} asked ${q.name} to leave.`);
+      ev("remove", { target: q.id, target_name: q.name });
+      ch.removedPlayers.push(q.id);
+      ch.meta = true;
+      return OK;
+    }
+    case "lock": {
+      if (typeof c.on !== "boolean") return no("malformed lock");
+      if (!isHost(s, pid)) return no("only the host can lock the room");
+      if (!!s.locked !== c.on) {
+        s.locked = c.on;
+        log(s, ch, c.on ? `${p.name} closed the room to new players.` : `${p.name} opened the room to new players.`);
+        ev("lock", { on: c.on });
+        ch.meta = true;
+      }
       return OK;
     }
     default:

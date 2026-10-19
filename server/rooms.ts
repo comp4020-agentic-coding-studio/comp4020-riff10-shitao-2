@@ -156,7 +156,7 @@ function flush(r: LiveRoom): void {
   if (ch.removed.length) d.removed = ch.removed;
   if (ch.lobby) d.lobby = s.lobby;
   if (ch.meta) {
-    const meta: NonNullable<Delta["meta"]> = { inventory: s.inventory, goods: s.goods, claims: s.claims, ops: s.ops, ledger: s.ledger, econ: s.econ, heat: s.heat, reserve: s.reserve, phase: s.phase, hostId: s.hostId };
+    const meta: NonNullable<Delta["meta"]> = { inventory: s.inventory, goods: s.goods, claims: s.claims, ops: s.ops, ledger: s.ledger, econ: s.econ, heat: s.heat, reserve: s.reserve, phase: s.phase, hostId: s.hostId, locked: !!s.locked };
     // the archive and history only ever grow: resend them only when they have
     if (s.archive.length !== r.sentArchive) meta.archive = s.archive;
     if (s.history.length !== r.sentHistory) meta.history = s.history;
@@ -268,6 +268,8 @@ export function attach(ws: WebSocket, ip: string): void {
         // the same player opened a second tab: the newest wins
         for (const other of r.conns) if (other.pid === pid) other.ws.close(4001, "opened in another tab");
       }
+      // a locked room still lets its own players back in; only strangers are turned away
+      if (!pid && s.locked) return fail("this room is locked to new players");
       const id = pid ?? randomUUID().slice(0, 12);
       const token = pid ? s.tokens[pid] : randomBytes(18).toString("base64url");
       const p = join(s, id, token, typeof msg.name === "string" ? msg.name : "", r.ch);
@@ -296,6 +298,8 @@ export function attach(ws: WebSocket, ip: string): void {
       }
       if (!isRecord(msg.c) || typeof msg.c.k !== "string") return fail("malformed command");
       const res = applyCommand(room.s, c.pid, msg.id, msg.gen, msg.c, room.ch);
+      // a removed player's sockets close now; their seat is free once the close lands
+      for (const gone of room.ch.removedPlayers.splice(0)) for (const o of room.conns) if (o.pid === gone) o.ws.close(4002, "removed by the host");
       if (msg.c.k !== "move") {
         send(c, res.ok ? { t: "ack", id: msg.id, ok: true } : { t: "ack", id: msg.id, ok: false, reason: res.reason });
         // refusals that touch someone else's ground or machine are worth narrating too

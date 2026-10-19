@@ -218,6 +218,74 @@ describe("real time", () => {
   });
 });
 
+describe("host moderation", () => {
+  const closed = (b: Bot): Promise<number> => new Promise((r) => b.ws.once("close", (code) => r(code)));
+  const connected = (b: Bot): string[] => Object.values(b.snap!.players).filter((p) => p.connected).map((p) => p.name);
+
+  it("only the host can remove a player or lock the room", async () => {
+    const room = await newRoom(baseUrl);
+    const host = await joined(baseUrl, room, "Ada");
+    const bo = await joined(baseUrl, room, "Bo");
+    expect(host.snap!.hostId).toBe(host.you);
+    const r1 = bo.cmd({ k: "remove", who: host.you });
+    expect(await bo.until((m) => m.t === "ack" && m.id === r1)).toMatchObject({ ok: false, reason: "only the host can remove a player" });
+    const r2 = bo.cmd({ k: "lock", on: true });
+    expect(await bo.until((m) => m.t === "ack" && m.id === r2)).toMatchObject({ ok: false, reason: "only the host can lock the room" });
+    // a hand-built command can't reach past the checks either
+    const r3 = host.cmd({ k: "remove", who: "__proto__" });
+    expect(await host.until((m) => m.t === "ack" && m.id === r3)).toMatchObject({ ok: false });
+    const r4 = host.cmd({ k: "remove", who: host.you });
+    expect(await host.until((m) => m.t === "ack" && m.id === r4)).toMatchObject({ ok: false });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(connected(host).sort()).toEqual(["Ada", "Bo"]);
+    expect(host.snap!.locked).toBeFalsy();
+    host.close();
+    bo.close();
+  });
+
+  it("the host's removal disconnects the player and frees their seat; their old token no longer works", async () => {
+    const room = await newRoom(baseUrl);
+    const host = await joined(baseUrl, room, "Ada");
+    const bo = await joined(baseUrl, room, "Bo");
+    const gone = closed(bo);
+    const id = host.cmd({ k: "remove", who: bo.you });
+    expect(await host.until((m) => m.t === "ack" && m.id === id)).toMatchObject({ ok: true });
+    expect(await gone).toBe(4002);
+    await host.until(() => !host.snap!.players[bo.you].connected);
+    expect(connected(host)).toEqual(["Ada"]);
+    // coming back with the forgotten token makes a stranger, not Bo
+    const again = await joined(baseUrl, room, "Bo", bo.token);
+    expect(again.you).not.toBe(bo.you);
+    host.close();
+    again.close();
+  });
+
+  it("a locked room refuses a newcomer with a reason, and still lets its own players back", async () => {
+    const room = await newRoom(baseUrl);
+    const host = await joined(baseUrl, room, "Ada");
+    const bo = await joined(baseUrl, room, "Bo");
+    const id = host.cmd({ k: "lock", on: true });
+    await host.until((m) => m.t === "ack" && m.id === id);
+    await bo.until(() => bo.snap!.locked === true);
+    const stranger = new Bot(baseUrl, originOf(baseUrl));
+    await stranger.open();
+    stranger.hello(room, "Mallory");
+    expect(await stranger.until((m) => m.t === "error")).toMatchObject({ reason: "this room is locked to new players" });
+    expect(stranger.msgs.some((m) => m.t === "welcome")).toBe(false);
+    // a returning player isn't a newcomer
+    bo.close();
+    await host.until(() => !host.snap!.players[bo.you].connected);
+    const back = await joined(baseUrl, room, "Bo", bo.token);
+    expect(back.you).toBe(bo.you);
+    // and opening it again lets the stranger in
+    const id2 = host.cmd({ k: "lock", on: false });
+    await host.until((m) => m.t === "ack" && m.id === id2);
+    const late = await joined(baseUrl, room, "Mallory");
+    expect(Object.keys(late.snap!.players)).toContain(late.you);
+    for (const b of [host, back, late, stranger]) b.close();
+  });
+});
+
 describe("touch", () => {
   // Every step of the early chain decided by client/touch.ts from taps alone, then sent
   // to the real server: no keyboard command, no hover. The same path driven by real touch
@@ -429,6 +497,8 @@ describe("the action log", () => {
       const b = await joined(url, room, "Bo");
       a.cmd({ k: "set", mode: "intensive" });
       a.cmd({ k: "emote", e: "wave" });
+      a.cmd({ k: "lock", on: true });
+      a.cmd({ k: "remove", who: b.you });
       await a.until((m) => m.t === "ack");
       // the lobby arrives on the first economy tick
       await new Promise((r) => setTimeout(r, 1500));
@@ -437,6 +507,8 @@ describe("the action log", () => {
       expect(lines.some((l) => l.includes(`actor=${b.you}`) && l.includes("name=Bo") && l.includes("action=join"))).toBe(true);
       expect(lines.some((l) => l.includes("name=Ada") && l.includes("action=mode") && l.includes("harvest=intensive"))).toBe(true);
       expect(lines.some((l) => /actor=lobby:\w+ name=\w+ action=lobby_arrive/.test(l))).toBe(true);
+      expect(lines.some((l) => l.includes(`actor=${a.you}`) && l.includes("name=Ada") && l.includes("action=lock on=true"))).toBe(true);
+      expect(lines.some((l) => l.includes(`actor=${a.you}`) && l.includes("name=Ada") && l.includes(`action=remove target=${b.you} target_name=Bo`))).toBe(true);
       for (const l of lines) expect(l).toMatch(/^room=\w{5} stage=earth tick=\d+ actor=\S+ name=\S+ action=\w+/);
       for (const tok of [a.token, b.token]) expect(out).not.toContain(tok);
       a.close();

@@ -145,3 +145,4 @@ kbd { background: var(--paper-2); border: 1px solid var(--line); border-radius: 
 .touchbar .row-buttons { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: center; }
 .touchbar button { min-height: 2.75rem; min-width: 2.75rem; padding: 0.3rem 0.8rem; }
 .touchbar .go { background: #c9f2cf; border-color: var(--ink); font-weight: 700; }
+.roster .small-btn { padding: 0 0.4rem; font-size: 0.72rem; }

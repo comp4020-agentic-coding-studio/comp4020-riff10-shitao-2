@@ -54,6 +54,7 @@ The factory chain, claims, networks and the Green Lobby (crit 10):
 - a resent harvest applies once (acknowledged twice); a command from a stale incarnation is refused with a fresh snapshot
 - messages built to throw when coerced (an `id` or `n` that's an object with a broken `toString`) are refused, and the server and room carry on: an independent review found this crashed the whole process
 - malformed messages are refused without disturbing the room
+- **host moderation**: a non-host's remove and lock are refused with the reason, as are removing yourself or a hand-built id like `__proto__`, and nothing changes; the host's removal closes the target's socket with 4002, frees their seat (shown away to the host), and their old token comes back as a stranger; a locked room answers a newcomer's hello with "this room is locked to new players" and no welcome, lets a returning player back in as themselves, and admits newcomers again once reopened. The action-log test also checks `action=lock on=true` and `action=remove target=<id> target_name=Bo` under the host's id and name
 - **touch, the early chain**: a player whose every step is decided by `client/touch.ts` from taps alone (no keyboard command, no hover) harvests timber, ore and water by tapping deposits (an out-of-reach tap walks towards them), places Cottages and a Sun Garden (the first tap on a tile only previews, checked by asserting nothing was built; the second places), then lays a cable beside both (tap start, tap end to preview, tap end again), and the Sun Garden comes up `ok` on a grid with something to feed
 - **restart recovery**: a private server on its own data directory is stopped with SIGTERM and restarted; the player rejoins as themselves under a new incarnation and the harvested tile is as they left it
 - **crash recovery, and how much a crash can lose**: a player harvests eight times, one swing every 0.85 s, and the server is SIGKILLed 0.3 s after the last acknowledgement, between saves. After restart, every harvest acknowledged more than 1.2 s before the kill (the one-second save interval, a 50 ms step and scheduling slack) is in the ledger, and nothing beyond what was acknowledged is. Against the old five-second interval this test fails. Both recovery tests check the ledger's extracted count rather than one tile, since a lobbyist may replant that tile in between
@@ -61,7 +62,7 @@ The factory chain, claims, networks and the Green Lobby (crit 10):
 
 **`spec/invariants.test.ts`**, the course's: `/` answers and `/readme/` publishes this README with every heading.
 
-56 tests, all passing locally against a freshly built server.
+59 tests, all passing locally against a freshly built server.
 
 ## Multiplayer playthroughs
 
@@ -81,6 +82,8 @@ The factory chain, claims, networks and the Green Lobby (crit 10):
 - **Recovering from a shortage**: the bot's factory sat at "idle: no metal ore (needs 3, has 1)". The browser player walked over and pressed `F`: the server logged the load (`loaded="2 mineral + 1 matter"`) and the factory's next batch three ticks later.
 - **Two browsers, no shared storage**: two separate `agent-browser` sessions joined one room as Ada and Bo. Ada harvested, then claimed a plot with `C` (the ghost read "✓ claim this 4×4"); Bo's browser, pointing a Plaza at it, read "✕ that's Ada's land" on the ghost and in the toast, and the server log told them apart by id and name: `name=Ada action=claim claim=1 x=9 y=8`, then `name=Bo action=refused cmd=build reason="that's Ada's land"`.
 - **Mobile**: at 390×844 the toolbar scrolls, the corner buttons sit above it, and tapping open ground walked the player there.
+
+**Host moderation in two browsers**: a desktop host (1920×1080) closed the room ("🔒 Closed to new players" appeared in the room panel and the log), removed a bot, then removed a phone-sized browser player. The phone showed "Disconnected: The host asked you to leave this room"; reloading it, with its token forgotten, got "this room is locked to new players". The server log named the host's id and name on every line: `action=lock on=true`, `action=remove target=da4e308d-4ef target_name=Griefer`. Console clean in both.
 
 **Touch only, in a phone-sized browser** (after the touch controls): `scripts/touchcheck.mjs` drives headless Chrome at 390×844 (`agent-browser set device "iPhone 12"`) with real touch events (`Input.dispatchTouchEvent` over CDP, touch emulation on), never a mouse event or a key, and plays from an empty stockpile: twenty-odd taps on deposits (walking taps between them), Cottages and a Sun Garden each placed by a preview tap and a confirming tap, both sites helped up by tapping them, then a cable: tap the start, tap the end (the route and "cable: 3 new tiles, 3 metal ore. Tap again to lay" shown, nothing laid), and the touch bar's "Lay cable". The run ends with the Sun Garden `ok` and the Cottages wanting only compute, console clean, in about 85 s on the normal preset. Building it found three things a finger couldn't do: a tap on the world landed on the corner buttons, which sat over the bottom third of the map while the toolbar was open; the tools (harvest, claim, take down) were under the build list's scroll; and a building's inspect panel covered the whole toolbar. The toolbar now folds away once a tool is picked or the world is tapped, the tools row sits first, and the inspect panel opens at the top of the screen on narrow viewports. At 1920×1080 with a mouse nothing changed: no touch bar, and a line is still two clicks with the hover preview.
 - Console clean throughout.
@@ -139,6 +142,5 @@ Answered from bot runs and browser play, not from human playtesters, which this 
 1. Human playtests of the first ten minutes (factory, claim, datacentre, first belt) and the ending, then tuning from what people actually do.
 2. Interest management (send each client only nearby tile changes) before maps grow.
 3. Sprite art for buildings and avatars, replacing the procedural shapes one family at a time (see [`ASSETS.md`](ASSETS.md)).
-4. Host moderation: remove a player, lock a room to new joiners.
-5. A photo album kept per room, so the archive has pictures, not just names.
-6. Drag to draw a line on a touch screen, as a quicker alternative to the three taps, once someone has tried the taps on a real phone.
+4. A photo album kept per room, so the archive has pictures, not just names.
+5. Drag to draw a line on a touch screen, as a quicker alternative to the three taps, once someone has tried the taps on a real phone.

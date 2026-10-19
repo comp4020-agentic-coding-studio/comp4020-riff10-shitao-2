@@ -20,9 +20,11 @@ export interface Changes {
   events: Ev[];
   /** a stage boundary or the ending: save now, then broadcast a fresh snapshot */
   boundary: boolean;
+  /** players the host removed: the server closes their sockets */
+  removedPlayers: string[];
 }
 
-export const newChanges = (): Changes => ({ tiles: new Set(), buildings: new Set(), removed: [], meta: false, lobby: false, log: 0, events: [], boundary: false });
+export const newChanges = (): Changes => ({ tiles: new Set(), buildings: new Set(), removed: [], meta: false, lobby: false, log: 0, events: [], boundary: false, removedPlayers: [] });
 
 export function log(s: RoomState, ch: Changes, text: string): void {
   s.log.push({ tick: s.tick, text });

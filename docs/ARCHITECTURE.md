@@ -100,6 +100,8 @@ The simulation records events in `Changes.events` as it applies commands and tic
 
 Room codes are five characters from a 31-letter alphabet without lookalikes. A code identifies a room; it doesn't authorise anything. An address can create 60 rooms an hour, and rooms nobody ever joined are deleted after a day. Authority is the per-player token the server mints on first join (18 random bytes), which the browser keeps in localStorage per room and presents on reconnect. A second tab with the same token takes over from the first. A room seats eight connected players; it remembers up to 32 identities, and past that forgets the one gone longest (its buildings stay, credited to "someone"), so browsers that came once and left can never fill a room.
 
+**Moderation.** The host can send `remove {who}` or `lock {on}`; the server refuses either from anyone else ("only the host can remove a player"). A removal marks the player away, deletes their token, and closes their sockets with code 4002, which the browser shows as "The host asked you to leave this room" and answers by forgetting its token. `locked` is saved with the room and sent in `meta`; a `hello` with no token for the room gets "this room is locked to new players". Both are logged (`action=remove target=… target_name=…`, `action=lock on=true`). They're additive (an older page simply never sends them) and `locked` is optional in saved state, so neither version changed.
+
 A room with nobody connected pauses: no ticks (the Green Lobby included), saved, and unloaded after a minute. Its next visitor loads it under a new incarnation. Why, and what that costs, is [ADR 0001](adr/0001-empty-rooms-pause.md).
 
 ## Deployment on Fly.io

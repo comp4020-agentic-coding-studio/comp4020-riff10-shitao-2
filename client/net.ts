@@ -81,6 +81,12 @@ export class GameClient {
         this.fail("This world is open in another tab.");
         return;
       }
+      if (e.code === 4002) {
+        // the server has forgotten this browser's place in the room
+        localStorage.removeItem(`plenty:token:${this.room}`);
+        this.fail("The host asked you to leave this room.");
+        return;
+      }
       if (this.status === "error") return;
       this.status = "reconnecting";
       this.bump();
@@ -167,7 +173,7 @@ export class GameClient {
         break;
       }
       case "error":
-        if (m.reason === "no such room" || m.reason === "this room is full" || m.reason.startsWith("this page is out of date")) this.fail(m.reason);
+        if (m.reason === "no such room" || m.reason === "this room is full" || m.reason === "this room is locked to new players" || m.reason.startsWith("this page is out of date")) this.fail(m.reason);
         else this.toast(m.reason, "bad");
         break;
       case "pong":

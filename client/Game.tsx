@@ -616,6 +616,15 @@ export default function Game({ room, name }: { room: string; name: string }): Re
           {s.phase.k === "transition" && <Transition s={s} />}
           {s.phase.k === "ended" && <Ending s={s} />}
           <Toasts client={client} />
+          {client.status === "error" && (
+            <div className="overlay center" role="alert">
+              <div className="card">
+                <p className="title">Disconnected</p>
+                <p>{client.error}</p>
+                <a href="/">Back to the start</a>
+              </div>
+            </div>
+          )}
           {client.status === "reconnecting" && (
             <div className="overlay center" role="status">
               <div className="card">
@@ -707,10 +716,33 @@ function RoomPanel({ s, client, host }: { s: Snapshot; client: GameClient; host:
                 {p.id === client.you ? " (you)" : ""}
                 {s.hostId === p.id ? " · host" : ""}
                 {p.connected ? "" : " · away"}
+                {host && p.id !== client.you && p.connected && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      className="small-btn"
+                      aria-label={`Remove ${p.name} from the room`}
+                      onClick={() => {
+                        if (window.confirm(`Remove ${p.name}? They'll be sent out of the room and come back, if it's open, as a newcomer. Their buildings stay.`)) client.send({ k: "remove", who: p.id });
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
               </li>
             ))}
         </ul>
-        {host && <p className="small">You're the host: you can take down anyone's buildings.</p>}
+        {s.locked && <p className="small">🔒 Closed to new players: anyone already here can come back.</p>}
+        {host && (
+          <>
+            <p className="small">You're the host: you can take down anyone's buildings, remove a player, or close the room.</p>
+            <button type="button" aria-pressed={!!s.locked} onClick={() => client.send({ k: "lock", on: !s.locked })}>
+              {s.locked ? "Open to new players" : "Close to new players"}
+            </button>
+          </>
+        )}
       </div>
   );
 }

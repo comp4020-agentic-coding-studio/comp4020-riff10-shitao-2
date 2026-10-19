@@ -223,6 +223,8 @@ export interface RoomState {
   seed: number;
   pace: Pace;
   hostId: string | null;
+  /** the host has closed the room to new players; returning ones still get in */
+  locked?: boolean;
   tick: number;
   seq: number;
   gen: number;
@@ -272,7 +274,9 @@ export type Command =
   | { k: "demolish"; x: number; y: number }
   | { k: "emote"; e: Emote }
   | { k: "mark"; x: number; y: number; name: string }
-  | { k: "stop"; on: boolean };
+  | { k: "stop"; on: boolean }
+  | { k: "remove"; who: string }
+  | { k: "lock"; on: boolean };
 
 export type ClientMsg =
   | { t: "hello"; v: number; room: string; token?: string; name: string }
@@ -297,7 +301,7 @@ export interface Delta {
   removed?: number[];
   /** the Green Lobby's agents, whenever any of them moved or changed */
   lobby?: Lobby;
-  meta?: Pick<RoomState, "inventory" | "goods" | "claims" | "ops" | "ledger" | "econ" | "heat" | "reserve" | "phase" | "hostId"> &
+  meta?: Pick<RoomState, "inventory" | "goods" | "claims" | "ops" | "ledger" | "econ" | "heat" | "reserve" | "phase" | "hostId" | "locked"> &
     Partial<Pick<RoomState, "archive" | "history">>;
   log?: LogEntry[];
 }
