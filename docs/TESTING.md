@@ -55,7 +55,7 @@ The factory chain, claims, networks and the Green Lobby (crit 10):
 - messages built to throw when coerced (an `id` or `n` that's an object with a broken `toString`) are refused, and the server and room carry on: an independent review found this crashed the whole process
 - malformed messages are refused without disturbing the room
 - **restart recovery**: a private server on its own data directory is stopped with SIGTERM and restarted; the player rejoins as themselves under a new incarnation and the harvested tile is as they left it
-- **crash recovery**: the same after SIGKILL, once the 5 s save interval has passed (both now check the ledger's extracted count rather than one tile, since a lobbyist may replant that tile in between)
+- **crash recovery, and how much a crash can lose**: a player harvests eight times, one swing every 0.85 s, and the server is SIGKILLed 0.3 s after the last acknowledgement, between saves. After restart, every harvest acknowledged more than 1.2 s before the kill (the one-second save interval, a 50 ms step and scheduling slack) is in the ledger, and nothing beyond what was acknowledged is. Against the old five-second interval this test fails. Both recovery tests check the ledger's extracted count rather than one tile, since a lobbyist may replant that tile in between
 - **the action log**: a private server's stdout names both players' joins with their ids and names, a harvest-mode change, a lobbyist's arrival, every line in the `room= stage= tick= actor= name= action=` shape, and never either player's token
 
 **`spec/invariants.test.ts`**, the course's: `/` answers and `/readme/` publishes this README with every heading.

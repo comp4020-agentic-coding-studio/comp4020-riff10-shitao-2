@@ -63,6 +63,8 @@ The design document, [`docs/DESIGN.md`](docs/DESIGN.md), covers the economy, pac
 
 One Node process on Fly.io owns every room's simulation and speaks WebSocket; browsers render the world and send intentions (move, harvest, build, claim, lay a line). The server decides everything, and logs every action with who did it, so `flyctl logs` tells the story of a room. The browser app is Next.js, exported to static files that the same process serves, with the world drawn on a Canvas 2D in its own frame loop. Rooms persist as snapshots in SQLite on the Fly volume.
 
+**What survives.** Close the tab, come back tomorrow, let the machine stop because nobody's playing, or sit through a redeploy: the world is as everyone left it, and your browser rejoins as you. A room with nobody in it is saved and paused, and a deploy or autostop saves every room before the machine stops, so none of those lose anything. Only an abrupt crash can cost play, and **a crash loses at most the last second of play, never more**: a changed room is saved every second, and the spec kills the server mid-play to check it.
+
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the stack, the protocol, authority, persistence, deployment and recovery
 - [`docs/DECISIONS.md`](docs/DECISIONS.md): the decision log, including the creative directions weighed at the start
 - [`docs/adr/0001-empty-rooms-pause.md`](docs/adr/0001-empty-rooms-pause.md): what a player finds when they come back
@@ -85,4 +87,4 @@ The rapid preset (a button on the front page) runs the same rules with the econo
 
 ## Known limits
 
-Desktop browsers with a keyboard first; on a phone you can tap to walk, harvest and use the toolbar, but laying lines is fiddly. One server process and one Fly machine host every room, so a deploy or crash pauses all rooms for a few seconds and can roll back up to five seconds of play. There's no text chat by design (emotes only), so moderation is limited to the host taking down buildings. The full list, and what to build next, is in [`docs/TESTING.md`](docs/TESTING.md).
+Desktop browsers with a keyboard first; on a phone you can tap to walk, harvest and use the toolbar, but laying lines is fiddly. One server process and one Fly machine host every room, so a deploy or crash pauses all rooms for a few seconds, and a crash (not a deploy) can roll back up to one second of play. There's no text chat by design (emotes only), so moderation is limited to the host taking down buildings. The full list, and what to build next, is in [`docs/TESTING.md`](docs/TESTING.md).

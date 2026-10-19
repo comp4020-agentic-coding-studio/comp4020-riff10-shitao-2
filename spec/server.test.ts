@@ -264,19 +264,33 @@ describe("persistence", () => {
     await stop(p, "SIGTERM");
   }, 30_000);
 
-  it("after an abrupt kill, loses at most the last save interval", async () => {
+  it("after an abrupt kill, loses at most the last second of play", async () => {
     let p = await boot();
     const room = await newRoom(url);
     const a = await joined(url, room, "Ada");
     const [x, y] = await walkToDeposit(a);
-    const idx = y * a.snap!.w + x;
-    a.cmd({ k: "harvest", x, y }, "h1");
-    await a.until((m) => m.t === "delta" && !!m.tiles?.some(([i]) => i === idx));
-    await new Promise((r) => setTimeout(r, 6000)); // > the 5 s save interval
+    // a steady harvest, one swing as soon as the cooldown allows, each acknowledgement timed
+    const acked: number[] = [];
+    for (let k = 0; k < 8; k++) {
+      const id = a.cmd({ k: "harvest", x, y }, `h${k}`);
+      const ack = await a.until((m) => m.t === "ack" && m.id === id);
+      expect(ack).toMatchObject({ ok: true });
+      acked.push(Date.now());
+      if (k < 7) await new Promise((r) => setTimeout(r, 850));
+    }
+    // kill mid-play, between saves, just after the last harvest landed
+    await new Promise((r) => setTimeout(r, 300));
+    const killedAt = Date.now();
     await stop(p, "SIGKILL");
     p = await boot();
     const back = await joined(url, room, "Ada", a.token);
-    expect(extracted(back.snap!)).toBe(1);
+    const kept = extracted(back.snap!);
+    // the guarantee: anything acknowledged more than a second (plus one 50 ms step and
+    // scheduling slack) before the crash is on disk; nothing that never happened is
+    const mustSurvive = acked.filter((t) => killedAt - t > 1200).length;
+    expect(mustSurvive).toBeGreaterThanOrEqual(6);
+    expect(kept).toBeGreaterThanOrEqual(mustSurvive);
+    expect(kept).toBeLessThanOrEqual(acked.length);
     back.close();
     await stop(p, "SIGTERM");
   }, 45_000);

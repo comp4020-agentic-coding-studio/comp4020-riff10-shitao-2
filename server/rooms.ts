@@ -9,7 +9,8 @@ import { applyCommand, createRoom, join, leave, newChanges, tick, type Changes }
 import type { Ev } from "../shared/world.ts";
 import { loadRoom, roomExists, saveRoom } from "./store.ts";
 
-const SAVE_EVERY_MS = 5000;
+// the most play an abrupt crash can lose: see docs/DECISIONS.md
+export const SAVE_EVERY_MS = 1000;
 const UNLOAD_AFTER_MS = 60_000;
 const MAX_CATCHUP_TICKS = 3;
 
