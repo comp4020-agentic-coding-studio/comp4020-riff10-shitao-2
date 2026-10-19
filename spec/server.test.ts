@@ -6,6 +6,10 @@ import { afterAll, describe, expect, inject, it } from "vitest";
 import WebSocket from "ws";
 import type { ServerMsg, Snapshot, Delta, Command } from "../shared/protocol.ts";
 import { PROTOCOL_VERSION } from "../shared/protocol.ts";
+import type { RoomState } from "../shared/protocol.ts";
+import { route } from "../shared/layout.ts";
+import { touchStep } from "../client/touch.ts";
+import type { View } from "../client/render.ts";
 
 // The real server over HTTP and WebSocket: what a browser actually talks to.
 const baseUrl = inject("baseUrl");
@@ -212,6 +216,113 @@ describe("real time", () => {
     a.close();
     b.close();
   });
+});
+
+describe("touch", () => {
+  // Every step of the early chain decided by client/touch.ts from taps alone, then sent
+  // to the real server: no keyboard command, no hover. The same path driven by real touch
+  // events in a phone-sized browser is scripts/touchcheck.mjs; how it feels is judged, not tested.
+  it("a touch-only player harvests, builds homes and power, and lays a cable", async () => {
+    const room = await newRoom(baseUrl, "rapid");
+    const a = await joined(baseUrl, room, "Tap");
+    const s = (): Snapshot => a.snap!;
+    const me = (): { x: number; y: number } => s().players[a.you];
+    const view: Pick<View, "tool" | "line" | "aim"> = { tool: "harvest", line: null, aim: null };
+    const buildings: { id: number; type: string; x: number; y: number }[] = [];
+    a.ws.on("message", (raw) => {
+      const m = JSON.parse(raw.toString()) as ServerMsg;
+      if (m.t === "delta") for (const b of m.buildings ?? []) if (!buildings.some((q) => q.id === b.id)) buildings.push(b);
+    });
+    const settle = (ms = 350): Promise<void> => new Promise((r) => setTimeout(r, ms));
+    /** a tap on a tile: walk there (as the page's walk loop does), aim, or act through the current tool */
+    async function tap(at: [number, number]): Promise<string> {
+      const step = touchStep(s(), view, me(), at);
+      if (step.k === "walk") {
+        for (let k = 0; k < 40; k++) {
+          const dx = step.to[0] - me().x;
+          const dy = step.to[1] - me().y;
+          if (Math.hypot(dx, dy) < 0.35) break;
+          a.cmd({ k: "move", dx, dy });
+          await settle(100);
+        }
+        a.cmd({ k: "move", dx: 0, dy: 0 });
+        await settle(200);
+      } else if (step.k === "aim") view.aim = step.at;
+      else {
+        const [x, y] = step.at;
+        if (view.tool === "harvest") a.cmd({ k: "harvest", x, y });
+        else if (view.tool === "build") a.cmd({ k: "build", x, y, type: build });
+        else if (view.tool === "line" && view.line && !view.line.from) [view.line.from, view.aim] = [step.at, step.at];
+        else if (view.tool === "line" && view.line?.from) {
+          a.cmd({ k: "line", kind: "cable", q: 0, path: route(s() as RoomState, "cable", view.line.from, step.at, a.you)! });
+          view.line.from = view.aim = null;
+        }
+        if (view.tool !== "line") view.aim = null;
+        await settle();
+      }
+      return step.k;
+    }
+    let build: "city" | "solar" = "city";
+    const near = (fam: "matter" | "mineral" | "coolant"): [number, number] => {
+      let best: [number, number] = [0, 0];
+      let bd = Infinity;
+      s().tiles.forEach((t, i) => {
+        const d = Math.hypot((i % s().w) - me().x, Math.floor(i / s().w) - me().y);
+        if (t.d === fam && t.amt > 0 && d < bd) [bd, best] = [d, [i % s().w, Math.floor(i / s().w)]];
+      });
+      return best;
+    };
+    // harvest by tapping deposits: an out-of-reach tap walks toward it, an in-reach one harvests
+    for (const [fam, want] of [["matter", 14], ["mineral", 24], ["coolant", 4]] as const)
+      for (let k = 0; s().inventory[fam] < want; k++) {
+        expect(k).toBeLessThan(40);
+        const d = near(fam);
+        if ((await tap(d)) === "walk") await tap(d); // tapping the deposit itself only walks to its tile
+        await settle(500);
+      }
+    // open ground beside the player for each 2x2 building, plus a ring for the cable
+    const open = (x: number, y: number): boolean => {
+      const t = s().tiles[y * s().w + x];
+      return !!t && t.t === 0 && !t.b && !(t.d && t.amt > 0) && !t.cb;
+    };
+    const spot = (): [number, number] => {
+      for (let r = 2; r < 8; r++)
+        for (let dy = -r; dy <= r; dy++)
+          for (let dx = -r; dx <= r; dx++) {
+            const x = Math.round(me().x) + dx;
+            const y = Math.round(me().y) + dy;
+            let ok = true;
+            for (let i = -1; ok && i <= 2; i++) for (let j = -1; ok && j <= 2; j++) ok = open(x + i, y + j);
+            if (ok) return [x, y];
+          }
+      throw new Error("no open ground nearby");
+    };
+    for (const type of ["city", "solar"] as const) {
+      build = type;
+      view.tool = "build";
+      const at = spot();
+      expect(await tap(at)).toBe("aim"); // the first tap only previews
+      expect(buildings.some((b) => b.type === type)).toBe(false);
+      expect(await tap(at)).toBe("act"); // the second, on the same tile, places it
+      await a.until(() => buildings.some((b) => b.type === type));
+      view.tool = "harvest";
+    }
+    const city = buildings.find((b) => b.type === "city")!;
+    const sun = buildings.find((b) => b.type === "solar")!;
+    // a cable from beside the Sun Garden to beside the Cottages: tap start, tap end, tap end again
+    view.tool = "line";
+    view.line = { kind: "cable", q: 0, from: null };
+    const from: [number, number] = [sun.x - 1, sun.y];
+    const to: [number, number] = [city.x - 1, city.y];
+    expect(await tap(from)).toBe("act");
+    expect(await tap(to)).toBe("aim");
+    expect(s().tiles.some((t) => t.cb)).toBe(false);
+    expect(await tap(to)).toBe("act");
+    await a.until(() => s().tiles.filter((t) => t.cb).length > 0);
+    // the cable joins power to homes: the Sun Garden is on a grid with something to feed
+    await a.until((m) => m.t === "delta" && !!m.buildings?.some((b) => b.id === sun.id && b.status === "ok"), 8000);
+    a.close();
+  }, 60_000);
 });
 
 describe("persistence", () => {

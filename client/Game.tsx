@@ -37,6 +37,7 @@ import { complete, isIdle } from "../shared/world.ts";
 import { GameClient } from "./net.ts";
 import { PLAYER_COLOURS, Renderer, type Tool, type View } from "./render.ts";
 import { Sound, type Mix } from "./audio.ts";
+import { confirmLabel, touchStep } from "./touch.ts";
 
 const EMOTE_GLYPH: Record<Emote, string> = { wave: "👋", heart: "💛", laugh: "😄", wow: "😮", sad: "😢", point: "👉" };
 const KEY_DIRS: Record<string, [number, number]> = {
@@ -70,6 +71,7 @@ function useVersion(client: GameClient | null): number {
   return client?.version ?? 0;
 }
 
+const prefersTouch = (): boolean => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 const prefersReducedMotion = (): boolean => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export default function Game({ room, name }: { room: string; name: string }): ReactNode {
@@ -77,12 +79,14 @@ export default function Game({ room, name }: { room: string; name: string }): Re
   const [client, setClient] = useState<GameClient | null>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const soundRef = useRef(new Sound());
-  const viewRef = useRef<View>({ tool: "harvest", build: null, eff: false, line: null, networks: false, hover: null, keyboardTarget: true, survey: false, selected: null, reducedMotion: prefersReducedMotion(), low: false, zoom: 1 });
+  const viewRef = useRef<View>({ tool: "harvest", build: null, eff: false, line: null, networks: false, hover: null, keyboardTarget: true, touch: prefersTouch(), aim: null, survey: false, selected: null, reducedMotion: prefersReducedMotion(), low: false, zoom: 1 });
   const [, force] = useState(0);
   const [help, setHelp] = useState(false);
   const [naming, setNaming] = useState<[number, number] | null>(null);
   const [mix, setMix] = useState<Mix>({ music: 0.5, ambience: 0.7, effects: 0.8 });
   const [settings, setSettings] = useState(false);
+  // phones: the toolbar folds away once a tool is picked, so the world it would cover can be tapped
+  const [tray, setTray] = useState(() => !(prefersTouch() && typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches));
   useVersion(client);
   const view = viewRef.current;
   const rerender = (): void => force((n) => n + 1);
@@ -106,6 +110,7 @@ export default function Game({ room, name }: { room: string; name: string }): Re
       viewRef.current.build = null;
       viewRef.current.line = null;
       viewRef.current.selected = null;
+      viewRef.current.aim = null;
     };
     c.connect();
     r.start();
@@ -128,6 +133,21 @@ export default function Game({ room, name }: { room: string; name: string }): Re
     snd.ended = s.phase.k === "ended" && s.phase.how !== "restraint";
   });
   useEffect(() => soundRef.current.setMix(mix), [mix]);
+
+  // whichever pointer was used last decides the controls: a finger anywhere (toolbar included) brings up the touch bar
+  useEffect(() => {
+    const seen = (e: PointerEvent): void => {
+      const touch = e.pointerType !== "mouse";
+      if (touch !== viewRef.current.touch) {
+        viewRef.current.touch = touch;
+        if (!touch) viewRef.current.aim = null;
+        rerender();
+      }
+    };
+    window.addEventListener("pointerdown", seen, true);
+    return () => window.removeEventListener("pointerdown", seen, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // keyboard
   useEffect(() => {
@@ -186,6 +206,7 @@ export default function Game({ room, name }: { room: string; name: string }): Re
       } else if (k === "escape") {
         if (viewRef.current.tool === "line" && viewRef.current.line?.from) {
           viewRef.current.line.from = null;
+          viewRef.current.aim = null;
           rerender();
         } else setTool("harvest");
         setHelp(false);
@@ -242,8 +263,14 @@ export default function Game({ room, name }: { room: string; name: string }): Re
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
+  /** a finger picked a tool: fold the toolbar on a phone so the world is clear to aim at */
+  function fold(): void {
+    if (view.touch && window.matchMedia("(max-width: 900px)").matches) setTray(false);
+  }
+
   function setTool(tool: Tool): void {
     view.tool = tool;
+    view.aim = null;
     if (tool !== "build") view.build = null;
     if (tool !== "line") view.line = null;
     if (tool !== "inspect") view.selected = null;
@@ -254,6 +281,7 @@ export default function Game({ room, name }: { room: string; name: string }): Re
     view.tool = "build";
     view.build = type;
     view.line = null;
+    view.aim = null;
     view.selected = null;
     if (!BUILDINGS[type].kit) view.eff = false;
     rerender();
@@ -265,6 +293,7 @@ export default function Game({ room, name }: { room: string; name: string }): Re
     view.selected = null;
     view.networks = true;
     view.line = { kind, q: LINES[kind].cost[q] ? q : 0, from: view.line?.kind === kind ? view.line.from : null };
+    view.aim = view.line.from;
     rerender();
   }
 
@@ -334,6 +363,8 @@ export default function Game({ room, name }: { room: string; name: string }): Re
         if (!ln) break;
         if (!ln.from) {
           ln.from = [x, y];
+          // on a touch screen the start stays previewed until the end is tapped
+          view.aim = [x, y];
           rerender();
           break;
         }
@@ -344,6 +375,7 @@ export default function Game({ room, name }: { room: string; name: string }): Re
         }
         c.send({ k: "line", kind: ln.kind, q: ln.q, path });
         ln.from = null;
+        view.aim = null;
         rerender();
         break;
       }
@@ -394,6 +426,7 @@ export default function Game({ room, name }: { room: string; name: string }): Re
     const rect = e.currentTarget.getBoundingClientRect();
     view.hover = rendererRef.current?.pick(e.clientX - rect.left, e.clientY - rect.top) ?? null;
     view.keyboardTarget = false;
+    if (e.pointerType === "mouse") view.touch = false;
   };
   // touch and pen: a tap on open ground walks there (a keyboard isn't the only way to move)
   const walkRef = useRef<[number, number] | null>(null);
@@ -420,32 +453,51 @@ export default function Game({ room, name }: { room: string; name: string }): Re
 
   const onClick = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     if (e.button !== 0) return;
+    view.touch = e.pointerType !== "mouse";
     onPointer(e);
-    const st = client?.state;
-    if (st && view.hover && view.tool === "harvest" && e.pointerType !== "mouse") {
-      const [hx, hy] = view.hover;
-      const t = hx >= 0 && hy >= 0 && hx < st.w && hy < st.w ? st.tiles[hy * st.w + hx] : undefined;
-      const reach = t && Math.hypot(hx - (client?.me.x ?? 0), hy - (client?.me.y ?? 0)) <= HARVEST_RANGE;
-      if (t && !t.b && !((t.d && t.amt > 0) && reach)) {
-        walkRef.current = [hx, hy];
-        return;
-      }
-    }
-    walkRef.current = null;
+    if (!view.hover) return;
     // a tall building is picked by what you see of it, not only its footprint
+    let at = view.hover;
     if (view.tool === "harvest" || view.tool === "inspect" || view.tool === "demolish") {
       const rect = e.currentTarget.getBoundingClientRect();
       const b = rendererRef.current?.pickBuilding(e.clientX - rect.left, e.clientY - rect.top);
-      if (b) return act(b.x, b.y);
+      if (b) at = [b.x, b.y];
     }
-    if (view.hover) act(view.hover[0], view.hover[1]);
+    const st = client?.state;
+    if (view.touch && st && client) {
+      fold();
+      // touch and pen: tap open ground to walk, tap once to aim anything that costs, again to do it
+      const step = touchStep(st, view, client.me, at);
+      if (step.k === "walk") {
+        walkRef.current = step.to;
+        return;
+      }
+      walkRef.current = null;
+      if (step.k === "aim") {
+        view.aim = step.at;
+        rerender();
+        return;
+      }
+      if (view.tool !== "line") view.aim = null;
+      return act(step.at[0], step.at[1]);
+    }
+    walkRef.current = null;
+    act(at[0], at[1]);
   };
+
+  /** The touch bar's confirm: do what the aimed tile previews. */
+  function confirmAim(): void {
+    const at = view.aim;
+    if (!at) return;
+    if (view.tool !== "line") view.aim = null;
+    act(at[0], at[1]);
+  }
 
   const st = s ? STAGES[s.stage] : null;
   const host = !!(s && client && s.hostId === client.you);
 
   return (
-    <main className="game">
+    <main className={`game ${tray ? "" : "tray-folded"}`}>
       <h1 className="sr-only">{st ? `Plenty: ${st.name}, room ${room}` : "Plenty"}</h1>
       <canvas
         ref={canvasRef}
@@ -478,7 +530,31 @@ export default function Game({ room, name }: { room: string; name: string }): Re
           {st.id === "universe" && s.phase.k === "play" && <LastFrontier s={s} you={client.you} onVote={(on) => client.send({ k: "stop", on })} />}
           </div>
           <RoomPanel s={s} client={client} host={host} />
-          <BuildBar s={s} view={view} onPick={chooseBuild} onTool={setTool} onLine={pickLine} onEff={(on) => { view.eff = on; rerender(); }} onNetworks={() => { view.networks = !view.networks; rerender(); }} />
+          <BuildBar s={s} view={view} onPick={(t) => { chooseBuild(t); fold(); }} onTool={(t) => { setTool(t); if (t !== "harvest") fold(); }} onLine={(k, q) => { pickLine(k, q); fold(); }} onEff={(on) => { view.eff = on; rerender(); }} onNetworks={() => { view.networks = !view.networks; rerender(); }}>
+            {view.touch && (
+              <TouchBar
+                s={s}
+                view={view}
+                tray={tray}
+                onTray={() => setTray((t) => !t)}
+                onConfirm={confirmAim}
+                onWalk={() => {
+                  if (view.aim) walkRef.current = view.aim;
+                }}
+                onHarvest={() => quickHarvest()}
+                onTend={() => quickTend()}
+                mode={s.players[client.you]?.mode ?? "careful"}
+                onMode={(mode) => client.send({ k: "set", mode })}
+                onCancel={() => {
+                  if (view.tool === "line" && view.line?.from) {
+                    view.line.from = null;
+                    view.aim = null;
+                    rerender();
+                  } else setTool("harvest");
+                }}
+              />
+            )}
+          </BuildBar>
           <Log s={s} client={client} />
           {view.selected !== null && (
             <Inspect
@@ -819,7 +895,9 @@ function BuildBar({
   onLine,
   onEff,
   onNetworks,
+  children,
 }: {
+  children?: ReactNode;
   s: Snapshot;
   view: View;
   onPick: (t: BuildingType) => void;
@@ -832,6 +910,7 @@ function BuildBar({
   const canEff = !!(view.build && BUILDINGS[view.build].kit);
   return (
     <div className="panel bottom" role="toolbar" aria-label="Build and tools">
+      {children}
       <div className="row-buttons">
         {st.buildings.map((type, i) => {
           const def = BUILDINGS[type];
@@ -886,7 +965,7 @@ function BuildBar({
           Networks (G)
         </button>
       </div>
-      <div className="row-buttons">
+      <div className="row-buttons tools">
         {canEff && (
           <label className="eff">
             <input type="checkbox" checked={view.eff} onChange={(e) => onEff(e.target.checked)} /> efficient build (+{costText(st, EFFICIENT_EXTRA)}, slower, kit built in)
@@ -897,6 +976,89 @@ function BuildBar({
             {{ harvest: "Harvest (E)", tend: "Load/collect (F)", claim: `Claim (C) ${costText(st, CLAIM_COST)}`, inspect: "Inspect (I)", demolish: "Take down (X)", mark: "Name (N)", build: "", line: "" }[t]}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Touch only: what the aimed tile will do and a button to do it, plus the
+ * actions a keyboard has keys for (harvest what's in reach, load or collect)
+ * and the way back to the toolbar once it has folded away.
+ */
+function TouchBar({
+  s,
+  view,
+  tray,
+  onTray,
+  onConfirm,
+  onWalk,
+  onHarvest,
+  onTend,
+  onCancel,
+  mode,
+  onMode,
+}: {
+  mode: "careful" | "intensive";
+  onMode: (m: "careful" | "intensive") => void;
+  s: Snapshot;
+  view: View;
+  tray: boolean;
+  onTray: () => void;
+  onConfirm: () => void;
+  onWalk: () => void;
+  onHarvest: () => void;
+  onTend: () => void;
+  onCancel: () => void;
+}): ReactNode {
+  const st = STAGES[s.stage];
+  const confirm = confirmLabel(view, (t) => buildingName(st, t));
+  const doing =
+    view.tool === "build" && view.build
+      ? `Placing ${buildingName(st, view.build)}`
+      : view.tool === "line" && view.line
+        ? view.line.from
+          ? `${LINES[view.line.kind].q[view.line.q]}: tap where it ends`
+          : `${LINES[view.line.kind].q[view.line.q]}: tap where it starts`
+        : { harvest: "Tap ground to walk, a deposit to harvest", tend: "Tap a machine to load or collect", claim: "Tap the middle of a 4×4 to claim", inspect: "Tap a building to inspect", demolish: "Tap what to take down", mark: "Tap a place to name", build: "", line: "" }[view.tool];
+  const aiming = view.tool === "build" || view.tool === "claim" || view.tool === "demolish" || (view.tool === "line" && !!view.line?.from);
+  return (
+    <div className="touchbar" role="group" aria-label="Touch controls">
+      <p className="small doing" aria-live="polite">
+        {doing}
+        {aiming && !view.aim ? ": tap once to preview, again to confirm" : ""}
+      </p>
+      <div className="row-buttons">
+        {confirm && (
+          <button type="button" className="go" onClick={onConfirm}>
+            {confirm}
+          </button>
+        )}
+        {view.aim && view.tool !== "harvest" && (
+          <button type="button" onClick={onWalk}>
+            Walk there
+          </button>
+        )}
+        {view.tool === "harvest" ? (
+          <>
+            <button type="button" onClick={onHarvest}>
+              Harvest nearby
+            </button>
+            <button type="button" onClick={onTend}>
+              Load/collect
+            </button>
+            <button type="button" aria-pressed={mode === "intensive"} title="Switch harvesting: careful takes 1 and wastes nothing; intensive takes 2 and destroys 1 more" onClick={() => onMode(mode === "careful" ? "intensive" : "careful")}>
+              {mode === "careful" ? "Careful" : "Intensive"}
+            </button>
+          </>
+        ) : (
+          <button type="button" onClick={onCancel}>
+            {view.tool === "line" && view.line?.from ? "Start over" : "Done"}
+          </button>
+        )}
+        <button type="button" onClick={onTray} aria-expanded={tray}>
+          {tray ? "Hide tools" : "Tools"}
+        </button>
       </div>
     </div>
   );
@@ -1039,7 +1201,8 @@ function Help({ onClose, st }: { onClose: () => void; st: (typeof STAGES)[number
       <div className="card help">
         <h2 id="help-h">How to play</h2>
         <ul>
-          <li><kbd>WASD</kbd> or arrows: walk (faster on a path); on a touch screen, tap open ground. Wheel or <kbd>+</kbd>/<kbd>-</kbd>: zoom.</li>
+          <li><kbd>WASD</kbd> or arrows: walk (faster on a path). Wheel or <kbd>+</kbd>/<kbd>-</kbd>: zoom.</li>
+          <li>On a touch screen: tap ground to walk, a deposit in reach to harvest. Building, claiming, taking down and lines take two taps on the same tile, the first to preview; a line is start, end, then the end again (or the green button).</li>
           <li><kbd>E</kbd>/<kbd>Space</kbd> (hold): harvest whatever's in reach, or help raise a building site. <kbd>M</kbd> switches careful (takes 1, wastes nothing) and intensive (takes 2, destroys 1 more).</li>
           <li><kbd>1</kbd>–<kbd>9</kbd>: pick a building. The ghost shows every shortage and why it can't go there. Click, or <kbd>Enter</kbd> for the tile you face. <kbd>Esc</kbd> cancels.</li>
           <li><kbd>F</kbd>: load the factory beside you from the shared stockpile and collect what it made; collect a harvester's hopper or a pump's tank; fill a datacentre's or dome's tank.</li>

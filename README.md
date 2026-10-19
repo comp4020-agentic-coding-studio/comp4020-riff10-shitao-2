@@ -20,6 +20,8 @@ Start a world from the front page and send the invite link (or the five-letter r
 - `I` inspects a building (recipes, buffers, what it runs on, why it's idle, and its efficiency kit), `X` takes one down for half its cost back, `N` names a favourite place, `V` surveys every deposit left, `P` saves a photo, and `Shift`+`1`--`6` emotes.
 - `H` opens help in the game.
 
+**On a phone or tablet** the whole early chain works with taps alone. Tap open ground to walk and a tree, rock or pond (or a building site) in reach to harvest it. Pick a building or a line from the toolbar and it folds away so the world is clear; anything that costs stock or takes something down is aimed first and done second: the first tap shows the same ghost a mouse would (cost, shortages, "that's Ada's land"), and a second tap on the same tile, or the green button in the touch bar, does it. A line is a tap where it starts, a tap where it ends to preview the route and its cost, and a third to lay it. The touch bar also has "Harvest nearby" and "Load/collect" for the `E` and `F` keys, a careful/intensive switch for `M`, and "Tools" to bring the toolbar back.
+
 ## The chain
 
 Every world runs the same short chain, in its own words, and the Cooperative memo in the corner walks you through it:
@@ -87,4 +89,4 @@ The rapid preset (a button on the front page) runs the same rules with the econo
 
 ## Known limits
 
-Desktop browsers with a keyboard first; on a phone you can tap to walk, harvest and use the toolbar, but laying lines is fiddly. One server process and one Fly machine host every room, so a deploy or crash pauses all rooms for a few seconds, and a crash (not a deploy) can roll back up to one second of play. There's no text chat by design (emotes only), so moderation is limited to the host taking down buildings. The full list, and what to build next, is in [`docs/TESTING.md`](docs/TESTING.md).
+Desktop browsers with a keyboard are the fullest way to play; on a phone everything in the early chain works by touch (harvest mode included, from the touch bar), but there's no pinch zoom, the side panels (stockpile detail, memo, lobby, log) are hidden to leave room for the world, and no human has played it on a real phone yet. One server process and one Fly machine host every room, so a deploy or crash pauses all rooms for a few seconds, and a crash (not a deploy) can roll back up to one second of play. There's no text chat by design (emotes only), so moderation is limited to the host taking down buildings. The full list, and what to build next, is in [`docs/TESTING.md`](docs/TESTING.md).

@@ -26,6 +26,10 @@ export interface View {
   hover: [number, number] | null;
   /** keyboard placement: the tile in front of the avatar, used when the mouse is idle */
   keyboardTarget: boolean;
+  /** the last pointer was a finger or pen: the target is the aimed tile, not the hover */
+  touch: boolean;
+  /** touch only: the tile tapped once, previewed until a second tap or the touch bar confirms */
+  aim: [number, number] | null;
   survey: boolean;
   selected: number | null;
   reducedMotion: boolean;
@@ -156,7 +160,7 @@ export class Renderer {
   }
 
   target(): [number, number] | null {
-    return this.view.keyboardTarget ? this.facingTile() : this.view.hover;
+    return this.view.keyboardTarget ? this.facingTile() : this.view.touch ? this.view.aim : this.view.hover;
   }
 
   private tileFx(i: number, amount: number): void {
@@ -916,10 +920,11 @@ export class Renderer {
             const me = s.players[this.client.you];
             const y = s.pace === "rapid" ? 10 : 1;
             const m = me?.mode === "intensive" ? `+${2 * y}, wastes ${y}` : `+${y}`;
+            if (this.view.touch) return `tap it to harvest ${st.families[t.d].label} (${m})`;
             return `E: harvest ${st.families[t.d].label} (${m}) · M: ${me?.mode === "intensive" ? "careful" : "intensive"}`;
           }
           const b = t.b ? s.buildings.find((q) => q.id === t.b) : undefined;
-          if (b && b.work < BUILDINGS[b.type].build * 10) return "E: help build";
+          if (b && b.work < BUILDINGS[b.type].build * 10) return this.view.touch ? "tap the site to help build" : "E: help build";
         }
     return null;
   }
@@ -1162,7 +1167,7 @@ export class Renderer {
       const cost = Object.entries(unit).map(([k, v]) => `${(v ?? 0) * fresh} ${itemLabel(st, k as Family)}`).join(", ");
       const [cx, cy] = toScreen(this.cam, ...toWorld(x, y));
       const name = LINES[ln.kind].q[ln.q];
-      this.label(problem ? `✕ ${problem}` : ln.from ? `${name}: ${fresh} new tile${fresh === 1 ? "" : "s"}, ${cost || "free"}. Click to lay` : `${name}: click where it starts`, cx, cy + 22 * this.cam.zoom, problem ? "#ffd1cc" : "#fffbe0", 12);
+      this.label(problem ? `✕ ${problem}` : ln.from ? `${name}: ${fresh} new tile${fresh === 1 ? "" : "s"}, ${cost || "free"}. ${this.view.touch ? "Tap again to lay" : "Click to lay"}` : `${name}: ${this.view.touch ? "tap" : "click"} where it starts`, cx, cy + 22 * this.cam.zoom, problem ? "#ffd1cc" : "#fffbe0", 12);
     } else if (x >= 0 && y >= 0 && x < s.w && y < s.w) {
       const stroke = this.view.tool === "demolish" ? "#ff8a7a" : this.view.tool === "mark" ? "#ffd27a" : "rgba(255,255,240,0.9)";
       this.poly(this.corners(x, y), "rgba(255,255,255,0.08)", stroke);

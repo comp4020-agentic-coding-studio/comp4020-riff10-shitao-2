@@ -125,9 +125,23 @@ kbd { background: var(--paper-2); border: 1px solid var(--line); border-radius: 
   .top-right { max-height: 9rem; overflow: auto; }
   .corner-buttons .emotes { display: none; }
   .corner-buttons button { padding: 0.2rem 0.5rem; font-size: 0.78rem; }
+  .tray-folded .bottom { max-height: none; }
+  /* over the top panels, so the toolbar and the building stay in reach */
+  .inspect { top: 0.6rem; bottom: auto; max-height: 45vh; z-index: 2; }
+  /* the tools a phone needs most sit above the build list, not under a scroll */
+  .bottom .touchbar { order: -2; }
+  .bottom .tools { order: -1; }
+  .tray-folded .corner-buttons { bottom: 8rem; }
 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .card .title { font-size: 2rem; font-weight: 700; margin: 0; }
 .loading h1 { font-size: 1.2rem; font-weight: 500; }
 .bottleneck { margin-top: 0.3rem; border-top: 1px solid rgba(0, 0, 0, 0.12); padding-top: 0.25rem; }
 .ending .card.dawn { background: rgba(255, 248, 232, 0.95); max-height: 90vh; overflow: auto; }
+.touchbar { display: grid; gap: 0.25rem; justify-items: center; padding-bottom: 0.3rem; border-bottom: 1px solid rgba(0, 0, 0, 0.12); width: 100%; }
+.tray-folded .bottom > .row-buttons, .tray-folded .bottom > .eff { display: none; }
+.tray-folded .bottom .touchbar { border-bottom: 0; padding-bottom: 0; }
+.touchbar .doing { margin: 0; text-align: center; }
+.touchbar .row-buttons { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: center; }
+.touchbar button { min-height: 2.75rem; min-width: 2.75rem; padding: 0.3rem 0.8rem; }
+.touchbar .go { background: #c9f2cf; border-color: var(--ink); font-weight: 700; }

@@ -54,13 +54,14 @@ The factory chain, claims, networks and the Green Lobby (crit 10):
 - a resent harvest applies once (acknowledged twice); a command from a stale incarnation is refused with a fresh snapshot
 - messages built to throw when coerced (an `id` or `n` that's an object with a broken `toString`) are refused, and the server and room carry on: an independent review found this crashed the whole process
 - malformed messages are refused without disturbing the room
+- **touch, the early chain**: a player whose every step is decided by `client/touch.ts` from taps alone (no keyboard command, no hover) harvests timber, ore and water by tapping deposits (an out-of-reach tap walks towards them), places Cottages and a Sun Garden (the first tap on a tile only previews, checked by asserting nothing was built; the second places), then lays a cable beside both (tap start, tap end to preview, tap end again), and the Sun Garden comes up `ok` on a grid with something to feed
 - **restart recovery**: a private server on its own data directory is stopped with SIGTERM and restarted; the player rejoins as themselves under a new incarnation and the harvested tile is as they left it
 - **crash recovery, and how much a crash can lose**: a player harvests eight times, one swing every 0.85 s, and the server is SIGKILLed 0.3 s after the last acknowledgement, between saves. After restart, every harvest acknowledged more than 1.2 s before the kill (the one-second save interval, a 50 ms step and scheduling slack) is in the ledger, and nothing beyond what was acknowledged is. Against the old five-second interval this test fails. Both recovery tests check the ledger's extracted count rather than one tile, since a lobbyist may replant that tile in between
 - **the action log**: a private server's stdout names both players' joins with their ids and names, a harvest-mode change, a lobbyist's arrival, every line in the `room= stage= tick= actor= name= action=` shape, and never either player's token
 
 **`spec/invariants.test.ts`**, the course's: `/` answers and `/readme/` publishes this README with every heading.
 
-55 tests, all passing locally against a freshly built server.
+56 tests, all passing locally against a freshly built server.
 
 ## Multiplayer playthroughs
 
@@ -80,6 +81,8 @@ The factory chain, claims, networks and the Green Lobby (crit 10):
 - **Recovering from a shortage**: the bot's factory sat at "idle: no metal ore (needs 3, has 1)". The browser player walked over and pressed `F`: the server logged the load (`loaded="2 mineral + 1 matter"`) and the factory's next batch three ticks later.
 - **Two browsers, no shared storage**: two separate `agent-browser` sessions joined one room as Ada and Bo. Ada harvested, then claimed a plot with `C` (the ghost read "✓ claim this 4×4"); Bo's browser, pointing a Plaza at it, read "✕ that's Ada's land" on the ghost and in the toast, and the server log told them apart by id and name: `name=Ada action=claim claim=1 x=9 y=8`, then `name=Bo action=refused cmd=build reason="that's Ada's land"`.
 - **Mobile**: at 390×844 the toolbar scrolls, the corner buttons sit above it, and tapping open ground walked the player there.
+
+**Touch only, in a phone-sized browser** (after the touch controls): `scripts/touchcheck.mjs` drives headless Chrome at 390×844 (`agent-browser set device "iPhone 12"`) with real touch events (`Input.dispatchTouchEvent` over CDP, touch emulation on), never a mouse event or a key, and plays from an empty stockpile: twenty-odd taps on deposits (walking taps between them), Cottages and a Sun Garden each placed by a preview tap and a confirming tap, both sites helped up by tapping them, then a cable: tap the start, tap the end (the route and "cable: 3 new tiles, 3 metal ore. Tap again to lay" shown, nothing laid), and the touch bar's "Lay cable". The run ends with the Sun Garden `ok` and the Cottages wanting only compute, console clean, in about 85 s on the normal preset. Building it found three things a finger couldn't do: a tap on the world landed on the corner buttons, which sat over the bottom third of the map while the toolbar was open; the tools (harvest, claim, take down) were under the build list's scroll; and a building's inspect panel covered the whole toolbar. The toolbar now folds away once a tool is picked or the world is tapped, the tools row sits first, and the inspect panel opens at the top of the screen on narrow viewports. At 1920×1080 with a mouse nothing changed: no touch bar, and a line is still two clicks with the hover preview.
 - Console clean throughout.
 - **A whole live campaign**: a rush bot and a green bot over the real protocol, rapid preset, from Earth to the consumed ending in about 13 minutes, a factory and datacentre on every world, two World Engines rendered down in the Universe when the Bottled Sun ran out. Reading its server log found one narration bug: a render logged the engine's name in place of the player's. Fixed, with a spec that every event names its actor.
 
@@ -87,7 +90,7 @@ The factory chain, claims, networks and the Green Lobby (crit 10):
 
 Screenshots at 1920×1080, 1600×900, 1400×850, 1280×720 and 390×844 of: lush Earth, industrial Earth (smoke, browned rings around furnaces), spent Earth (12% living land), Mars with domes and a colony stalled on ice, the Sun bright and dimmed, the Solar System with relays and remnants, the Universe with its stars going out, a transition card and the ending. Findings fixed along the way: overlapping HUD panels at 1280×720, a sky that stayed bright after the Sun was spent, an Earth that never looked desolate (the water-table rule), toasts stacking, duplicate player names.
 
-At 390×844 the game renders and the HUD fits (secondary panels hide), but it's a desktop game: there are no touch controls.
+At 390×844 the game renders and the HUD fits (secondary panels hide). Touch controls are covered above. What isn't tested and has to be judged: whether a finger covering the tile it taps makes the preview hard to read (the ghost's label sits below the tile, and the touch bar repeats what will happen), whether 44 px touch-bar buttons are comfortable, and how any of it feels on a real phone rather than emulated touch.
 
 **Accessibility**: `agent-browser a11y` (axe-core 4.12 in a real browser) reports no violations on the front page or the play screen with the HUD loaded. Every control is a native button or input with a text label; building status and stock levels are text, never colour alone; there's a reduced-motion setting defaulting to the OS preference; audio starts only on a click and has three volume controls.
 
@@ -128,7 +131,7 @@ Answered from bot runs and browser play, not from human playtesters, which this 
 - **Deployment**: this run doesn't deploy; CI deploys the pod's app on push. Nothing here claims a verified live deployment.
 - **Human playtesting**: everything above is bots and a scripted browser.
 - **An ordinary laptop**: see performance.
-- **Mobile and touch**: tap to walk works; laying lines and claiming by touch work but are fiddly, and no human has tried it.
+- **Mobile and touch on real hardware**: the early chain is checked with emulated touch in headless Chrome, not on a phone in someone's hand. No pinch zoom or drag-to-pan (the camera follows the avatar, so neither is needed to progress), and the stockpile detail, memo, lobby and log panels stay hidden at phone widths.
 - **Human playtests of the factory chain**: the pacing table in `DESIGN.md` is bots, who know the recipes. A first-time group will be slower to the datacentre.
 
 ## Next development, in priority order
@@ -138,4 +141,4 @@ Answered from bot runs and browser play, not from human playtesters, which this 
 3. Sprite art for buildings and avatars, replacing the procedural shapes one family at a time (see [`ASSETS.md`](ASSETS.md)).
 4. Host moderation: remove a player, lock a room to new joiners.
 5. A photo album kept per room, so the archive has pictures, not just names.
-6. Touch-first line laying (drag to draw).
+6. Drag to draw a line on a touch screen, as a quicker alternative to the three taps, once someone has tried the taps on a real phone.
