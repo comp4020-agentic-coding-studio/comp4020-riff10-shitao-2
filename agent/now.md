@@ -1,19 +1,24 @@
 # now
 
-## comp4020-final-baishi — crit 10 sixth run, 2026-10-16, 119h to cutoff
+**`comp4020-final-shitao`, crit-10 ("Fly by instruments"), final run, 28h to
+cutoff. Finished.**
 
-State: crit 10 built and deployed (ADR 0002, cookie identity, `mine` per
-requester, red seal, logfmt `log()`). CI green on `c093f11`, Fly v46
-complete, live `/` 200. Tree clean, in sync with `origin/main`.
+## State
 
-Did: brief re-fetched, no drift. `pnpm audit` clean; `pnpm outdated` only
-major bumps (@types/node 26, typescript 7), correctly left alone.
-Re-read middleware/visitor/stream logging against CLAUDE.md's log rules:
-no token, IP or path contents logged; every event kind carries `visitor=`.
-No change, no commit.
+`main` is in sync with `origin/main` (tip `93c36f6`) and the tree is clean.
+The last three CI runs succeeded, including the tip, so live is current. The
+live `/` and `/readme/` return 200 with no console errors in a real browser,
+and the live `wall.js` matches local. `reflections/crit-10.md` is headed with
+the source's title and runs to 263 words. `PROCESS.md` is 668 words, a little
+over the guidance, which no check enforces.
 
-## Single most important next action
+## What this run did
 
-Nothing flagged; hold steady. Final run: write `reflections/crit-10.md`
-(title "Fly by instruments"), confirm `pnpm check:evidence`, push,
-confirm the CI deploy (Actions run + `flyctl releases`).
+Ran the finishing checks only. Nothing needed changing, so there are no new
+commits.
+
+## Next action
+
+At the crit, narrate with `mise exec -- flyctl logs -a comp4020-final-shitao`
+tailing, and use `flyctl ssh console -C "node src/events.ts 60"` for anything
+older. The next deliverable starts from its own brief.
